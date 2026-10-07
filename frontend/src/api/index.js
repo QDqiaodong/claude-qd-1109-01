@@ -39,11 +39,13 @@ export default {
   updateHive: (id, d) => call(http.put(`/hives/${id}`, d)),
   deleteHive: (id) => call(http.delete(`/hives/${id}`)),
 
-  // ---------------- 巡检 ----------------
+  // ---------------- 巡检 · 异常处置与复检 ----------------
   listInspections: (opts) => call(http.get('/inspections', params(clean(opts)))),
+  getInspection: (id) => call(http.get(`/inspections/${id}`)),
   createInspection: (d) => call(http.post('/inspections', d)),
   updateInspection: (id, d) => call(http.put(`/inspections/${id}`, d)),
-  recheckInspection: (id) => call(http.post(`/inspections/${id}/recheck`)),
+  registerHandling: (handlingId, d) => call(http.post(`/inspections/handlings/${handlingId}/register`, d)),
+  recheckHandling: (handlingId, d) => call(http.post(`/inspections/handlings/${handlingId}/recheck`, d)),
 
   // ---------------- 采蜜批次 ----------------
   listHoneyBatches: (status) => call(http.get('/honey-batches', params(status ? { status } : {}))),

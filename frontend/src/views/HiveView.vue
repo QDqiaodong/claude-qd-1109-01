@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
 
 const list = ref([])
@@ -48,11 +48,17 @@ async function submit() {
 
 async function remove(row) {
   try {
+    // 软删除：关联巡检、异常处置与复检历史全部保留，在巡检看板仍可追溯
+    await ElMessageBox.confirm(
+      `确认删除蜂箱 ${row.code}？删除后台账不再显示该箱，但其历史巡检、异常处置与复检记录都会保留可追溯，箱号可重新建档使用。`,
+      '删除蜂箱（保留历史）',
+      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }
+    )
     await api.deleteHive(row.id)
-    ElMessage.success('已删除')
+    ElMessage.success('蜂箱已删除，关联巡检与处置历史已保留')
     await load()
   } catch (e) {
-    ElMessage.error(e.message)
+    if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
   }
 }
 

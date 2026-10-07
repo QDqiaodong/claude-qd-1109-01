@@ -9,7 +9,10 @@ import com.bee.apiary.entity.Hive;
 
 public interface HiveRepository extends JpaRepository<Hive, Long> {
 
-    Optional<Hive> findByCode(String code);
+    /** 箱号唯一仅在未删除蜂箱间生效（active_code 唯一索引） */
+    Optional<Hive> findByCodeAndDeletedFalse(String code);
 
-    List<Hive> findByStatus(String status);
+    List<Hive> findByStatusAndDeletedFalse(String status);
+
+    List<Hive> findByDeletedFalse();
 }

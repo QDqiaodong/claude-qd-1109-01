@@ -10,6 +10,7 @@ import com.bee.apiary.entity.Inspection;
 
 public interface InspectionRepository extends JpaRepository<Inspection, Long> {
 
+    /** 月历唯一性：同一蜂箱同一天仅一条巡检（跨月查看也不会重复） */
     Optional<Inspection> findByHiveIdAndInspectDate(Long hiveId, LocalDate inspectDate);
 
     List<Inspection> findByHiveId(Long hiveId);

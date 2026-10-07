@@ -58,6 +58,22 @@ public class GlobalExceptionHandler {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(ApiResponse.fail("该批次已有一条生效中的质检记录，请刷新后查看最新结果"));
         }
+        if (detail.contains("uk_abnormal_active_inspection")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.fail("该异常巡检已存在一条处置任务，跨月查看不会重复生成，请刷新后查看最新处置状态"));
+        }
+        if (detail.contains("uk_recheck_handling")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.fail("该处置已发起过复检，每条处置仅允许一次复检"));
+        }
+        if (detail.contains("uk_inspection_hive_date")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.fail("该蜂箱当天已存在巡检记录，月历按蜂箱+日期唯一，不可重复"));
+        }
+        if (detail.contains("uk_hive_active_code")) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.fail("箱号已存在，请更换箱号（已删除蜂箱的箱号可重新使用）"));
+        }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.fail("存在唯一性约束冲突，请检查编号、手机号是否重复"));
     }
 

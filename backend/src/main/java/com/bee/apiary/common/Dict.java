@@ -22,10 +22,24 @@ public final class Dict {
     public static final List<String> BEE_HEALTH = List.of("健康", "一般", "病态");
 
     // ---------------- 巡检 ----------------
-    /** 已记录 → 已复检，逐级推进 */
-    public static final List<String> INSPECTION_FLOW = List.of("已记录", "已复检");
+    /**
+     * 健康巡检停留「已记录」；异常（一般/病态）巡检进入处置链：
+     * 待处置 →（登记处置措施/负责人/截止日期并完成）→ 待复检 →（唯一一次复检）
+     *   合格 → 已解除；不合格 → 新一轮「待处置」（旧处置保留）。
+     */
+    public static final List<String> INSPECTION_STATUS = List.of(
+            "已记录", "待处置", "待复检", "已解除");
 
-    public static final List<String> INSPECTION_STATUS = List.of("已记录", "已复检");
+    // ---------------- 异常处置 ----------------
+    /** 处置项状态：当前生效链为 待处置 / 待复检；复检不合格与已解除为保留的历史轮次 */
+    public static final List<String> ABNORMAL_HANDLING_STATUS = List.of(
+            "待处置", "待复检", "复检不合格", "已解除");
+
+    /** 复检结论 */
+    public static final List<String> ABNORMAL_RECHECK_RESULT = List.of("合格", "不合格");
+
+    /** 复检不合格时风险期限顺延天数 */
+    public static final int ABNORMAL_EXTEND_DAYS = 7;
 
     // ---------------- 采蜜批次 ----------------
     /** 待质检 → 质检放行/复检合格 → 已入库；不合格进入隔离，已作废为终态 */
@@ -61,14 +75,21 @@ public final class Dict {
         return health != null && BEE_HEALTH.contains(health);
     }
 
-    /** 巡检状态只能逐级推进：已记录 → 已复检 */
-    public static boolean canTransferInspection(String from, String to) {
-        int i = INSPECTION_FLOW.indexOf(from);
-        return i >= 0 && i + 1 < INSPECTION_FLOW.size() && INSPECTION_FLOW.get(i + 1).equals(to);
-    }
-
     public static boolean isValidInspectionStatus(String status) {
         return status != null && INSPECTION_STATUS.contains(status);
+    }
+
+    public static boolean isValidAbnormalHandlingStatus(String status) {
+        return status != null && ABNORMAL_HANDLING_STATUS.contains(status);
+    }
+
+    public static boolean isValidAbnormalRecheckResult(String result) {
+        return result != null && ABNORMAL_RECHECK_RESULT.contains(result);
+    }
+
+    /** 异常健康取值：一般 / 病态，需要登记处置；健康巡检不进入处置链 */
+    public static boolean isAbnormalHealth(String health) {
+        return "一般".equals(health) || "病态".equals(health);
     }
 
     public static boolean isValidHoneyBatchStatus(String status) {

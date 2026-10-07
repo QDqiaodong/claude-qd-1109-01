@@ -15,6 +15,8 @@ CREATE DATABASE IF NOT EXISTS bee_apiary
 USE bee_apiary;
 
 SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS abnormal_recheck;
+DROP TABLE IF EXISTS abnormal_handling;
 DROP TABLE IF EXISTS quality_handling;
 DROP TABLE IF EXISTS quality_inspection;
 DROP TABLE IF EXISTS inspection;
@@ -24,24 +26,79 @@ DROP TABLE IF EXISTS customer;
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ---------------- 蜂箱 ----------------
+-- deleted=1 为软删除：删除/编辑蜂箱都保留关联巡检与处置历史；
+-- active_code 为生成列，仅未删除蜂箱占用箱号唯一索引，箱号删除后可重新使用。
 CREATE TABLE hive (
-    id        BIGINT AUTO_INCREMENT PRIMARY KEY,
-    code      VARCHAR(32) NOT NULL UNIQUE COMMENT '箱号 H-01',
-    location  VARCHAR(64) COMMENT '摆放点',
-    status    VARCHAR(16) COMMENT '正常 / 待检 / 患病',
-    created_at DATETIME COMMENT '创建时间'
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    code        VARCHAR(32) NOT NULL COMMENT '箱号 H-01',
+    location    VARCHAR(64) COMMENT '摆放点',
+    status      VARCHAR(16) COMMENT '正常 / 待检 / 患病',
+    deleted     TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否已删除（软删保留历史）',
+    active_code VARCHAR(32) GENERATED ALWAYS AS (IF(deleted = 0, code, NULL)) VIRTUAL COMMENT '未删除箱号唯一约束辅助列',
+    created_at  DATETIME COMMENT '创建时间',
+    UNIQUE KEY uk_hive_active_code (active_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------- 巡检 ----------------
+-- status：健康巡检为「已记录」；异常（一般/病态）巡检进入处置链：
+-- 待处置 → 待复检 → 已解除；复检不合格回退为新一轮「待处置」。
+-- (hive_id, inspect_date) 唯一：月历按蜂箱+日期唯一，跨月查看不会重复生成处置任务。
 CREATE TABLE inspection (
-    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
-    hive_id     BIGINT NOT NULL COMMENT '蜂箱 id',
+    id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+    hive_id      BIGINT NOT NULL COMMENT '蜂箱 id',
     inspect_date DATE NOT NULL COMMENT '巡检日期',
-    honey_kg    DECIMAL(8,2) NOT NULL COMMENT '产蜜 kg',
-    bee_health  VARCHAR(16) COMMENT '健康 / 一般 / 病态',
-    note        VARCHAR(255) COMMENT '备注',
-    status      VARCHAR(16) COMMENT '已记录 / 已复检',
-    created_at  DATETIME COMMENT '创建时间'
+    honey_kg     DECIMAL(8,2) NOT NULL COMMENT '产蜜 kg',
+    bee_health   VARCHAR(16) COMMENT '健康 / 一般 / 病态',
+    note         VARCHAR(255) COMMENT '备注 / 现场异常描述',
+    status       VARCHAR(16) COMMENT '已记录 / 待处置 / 待复检 / 已解除',
+    created_at   DATETIME COMMENT '创建时间',
+    UNIQUE KEY uk_inspection_hive_date (hive_id, inspect_date),
+    INDEX idx_inspection_date (inspect_date),
+    INDEX idx_inspection_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------- 异常处置 ----------------
+-- 每条异常巡检至少一个处置项；复检不合格时旧处置置为「复检不合格」并保留，
+-- 另起一轮新的待处置项（round_no 递增、source_handling_id 指向上轮、截止日期顺延）。
+-- active_inspection_id 生成列 + 唯一索引：同一巡检同时只有一条生效处置，
+-- 跨月重复查看/并发登记都不会产生第二条待办。
+CREATE TABLE abnormal_handling (
+    id                    BIGINT AUTO_INCREMENT PRIMARY KEY,
+    inspection_id         BIGINT NOT NULL COMMENT '异常巡检 id',
+    hive_id               BIGINT NOT NULL COMMENT '蜂箱 id（冗余便于按箱预警）',
+    round_no              INT NOT NULL DEFAULT 1 COMMENT '处置轮次，复检不合格顺延 +1',
+    source_handling_id    BIGINT COMMENT '上一轮处置 id（顺延链路）',
+    measure               VARCHAR(255) COMMENT '处置措施（处置说明）',
+    handler               VARCHAR(32) COMMENT '负责人',
+    due_date              DATE COMMENT '处置截止日期',
+    site_note             VARCHAR(500) COMMENT '现场说明',
+    status                VARCHAR(16) NOT NULL COMMENT '待处置 / 待复检 / 复检不合格 / 已解除',
+    registered_at         DATETIME COMMENT '处置信息登记时间',
+    completed_at          DATETIME COMMENT '处置完成时间',
+    active                TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否当前生效处置',
+    active_inspection_id  BIGINT GENERATED ALWAYS AS (IF(active = 1, inspection_id, NULL)) VIRTUAL COMMENT '生效处置唯一约束辅助列',
+    created_at            DATETIME COMMENT '创建时间',
+    UNIQUE KEY uk_abnormal_active_inspection (active_inspection_id),
+    INDEX idx_abnormal_handling_hive (hive_id, active),
+    INDEX idx_abnormal_handling_status (status),
+    INDEX idx_abnormal_handling_due (due_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------- 异常处置复检 ----------------
+-- 一条处置完成后最多一次复检（handling_id 唯一）：合格解除提醒，
+-- 不合格保留原异常并由处置表重新生成待处置项。
+CREATE TABLE abnormal_recheck (
+    id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+    handling_id   BIGINT NOT NULL COMMENT '对应处置项 id',
+    inspection_id BIGINT NOT NULL COMMENT '异常巡检 id',
+    hive_id       BIGINT NOT NULL COMMENT '蜂箱 id',
+    result        VARCHAR(16) NOT NULL COMMENT '复检结论：合格 / 不合格',
+    inspector     VARCHAR(32) NOT NULL COMMENT '复检人',
+    recheck_date  DATE NOT NULL COMMENT '复检日期',
+    note          VARCHAR(500) COMMENT '复检说明',
+    created_at    DATETIME COMMENT '创建时间',
+    UNIQUE KEY uk_recheck_handling (handling_id),
+    INDEX idx_recheck_inspection (inspection_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------- 采蜜批次 ----------------
@@ -111,25 +168,46 @@ CREATE TABLE customer (
 -- 种子数据
 -- =====================================================================
 
-INSERT INTO hive (code, location, status, created_at) VALUES
-('H-01', '南侧坡地',   '正常', NOW() - INTERVAL 60 DAY),
-('H-02', '东侧果园',   '正常', NOW() - INTERVAL 60 DAY),
-('H-03', '北侧林缘',   '待检', NOW() - INTERVAL 60 DAY),
-('H-04', '西侧花田',   '患病', NOW() - INTERVAL 60 DAY),
-('H-05', '南侧坡地',   '正常', NOW() - INTERVAL 55 DAY),
-('H-06', '中央平台',   '待检', NOW() - INTERVAL 55 DAY),
-('H-07', '东侧果园',   '正常', NOW() - INTERVAL 50 DAY),
-('H-08', '北侧林缘',   '患病', NOW() - INTERVAL 50 DAY);
+INSERT INTO hive (id, code, location, status, deleted, created_at) VALUES
+(1, 'H-01', '南侧坡地',   '正常', 0, NOW() - INTERVAL 60 DAY),
+(2, 'H-02', '东侧果园',   '正常', 0, NOW() - INTERVAL 60 DAY),
+(3, 'H-03', '北侧林缘',   '患病', 0, NOW() - INTERVAL 60 DAY),
+(4, 'H-04', '西侧花田',   '患病', 0, NOW() - INTERVAL 60 DAY),
+(5, 'H-05', '南侧坡地',   '正常', 0, NOW() - INTERVAL 55 DAY),
+(6, 'H-06', '中央平台',   '待检', 0, NOW() - INTERVAL 55 DAY),
+(7, 'H-07', '东侧果园',   '正常', 0, NOW() - INTERVAL 50 DAY),
+(8, 'H-08', '北侧林缘',   '正常', 0, NOW() - INTERVAL 50 DAY);
 
-INSERT INTO inspection (hive_id, inspect_date, honey_kg, bee_health, note, status, created_at) VALUES
-(1, CURDATE(),         8.50, '健康', NULL,                 '已记录', NOW()),
-(2, DATE_SUB(CURDATE(), INTERVAL 1 DAY),     6.20, '一般', '偶有分蜂迹象',        '已记录', NOW()),
-(3, CURDATE(),         0.00, '病态', '发现幼虫病疑似',      '已记录', NOW()),
-(4, DATE_SUB(CURDATE(), INTERVAL 2 DAY),     3.10, '病态', '已隔离治疗',          '已复检', NOW()),
-(5, DATE_SUB(CURDATE(), INTERVAL 3 DAY),     7.80, '健康', NULL,                 '已记录', NOW()),
-(6, CURDATE(),         5.00, '一般', '蜂王偏老',            '已复检', NOW()),
-(1, DATE_SUB(CURDATE(), INTERVAL 5 DAY),     9.10, '健康', NULL,                 '已复检', NOW()),
-(2, DATE_SUB(CURDATE(), INTERVAL 6 DAY),     4.40, '健康', NULL,                 '已记录', NOW());
+-- 巡检种子覆盖：健康已记录 / 待处置(逾期) / 待处置 / 待复检 / 复检不合格后新一轮待处置(连续异常) / 已解除
+INSERT INTO inspection (id, hive_id, inspect_date, honey_kg, bee_health, note, status, created_at) VALUES
+(1, 1, CURDATE(),                                       8.50, '健康', NULL,                 '已记录', NOW()),
+(2, 2, DATE_SUB(CURDATE(), INTERVAL 1 DAY),             6.20, '一般', '偶有分蜂迹象',        '待复检', NOW()),
+(3, 3, CURDATE(),                                       0.00, '病态', '发现幼虫病疑似',      '待处置', NOW()),
+(4, 4, DATE_SUB(CURDATE(), INTERVAL 2 DAY),             3.10, '病态', '成蜂大量死亡',        '待处置', NOW()),
+(5, 5, DATE_SUB(CURDATE(), INTERVAL 3 DAY),             7.80, '健康', NULL,                 '已记录', NOW()),
+(6, 6, DATE_SUB(CURDATE(), INTERVAL 6 DAY),             5.00, '病态', '蜂王偏老且产卵异常',  '待处置', NOW()),
+(7, 1, DATE_SUB(CURDATE(), INTERVAL 5 DAY),             9.10, '健康', NULL,                 '已记录', NOW()),
+(8, 2, DATE_SUB(CURDATE(), INTERVAL 6 DAY),             4.40, '健康', NULL,                 '已记录', NOW()),
+(9, 8, DATE_SUB(CURDATE(), INTERVAL 12 DAY),            3.60, '一般', '封盖蜜偏稀，需观察',  '已解除', NOW() - INTERVAL 12 DAY);
+
+INSERT INTO abnormal_handling
+(id, inspection_id, hive_id, round_no, source_handling_id, measure, handler, due_date, site_note, status, registered_at, completed_at, active, created_at) VALUES
+(1, 2, 2, 1, NULL, '加隔王板控制分蜂热，补充饲喂', '何强', DATE_ADD(CURDATE(), INTERVAL 2 DAY), '巢门拥挤，午后挂须',
+ '待复检', NOW() - INTERVAL 1 DAY, NOW(), 1, NOW() - INTERVAL 1 DAY),
+(2, 3, 3, 1, NULL, NULL, NULL, NULL, NULL,
+ '待处置', NULL, NULL, 1, NOW()),
+(3, 4, 4, 1, NULL, '隔离病群，按剂量施药治疗', '陈晨', DATE_SUB(CURDATE(), INTERVAL 1 DAY), '箱底见死蜂，蜂量下降约三成',
+ '待处置', NOW() - INTERVAL 2 DAY, NULL, 1, NOW() - INTERVAL 2 DAY),
+(4, 6, 6, 1, NULL, '更换蜂王并合并弱群', '何强', DATE_SUB(CURDATE(), INTERVAL 3 DAY), '子脾花子，雄蜂房偏多',
+ '复检不合格', NOW() - INTERVAL 6 DAY, NOW() - INTERVAL 4 DAY, 0, NOW() - INTERVAL 6 DAY),
+(5, 6, 6, 2, 4, '二次换王，全场消毒并补饲', '周敏', DATE_ADD(CURDATE(), INTERVAL 1 DAY), '首轮换王未成功，仍见花子',
+ '待处置', NOW() - INTERVAL 2 DAY, NULL, 1, NOW() - INTERVAL 2 DAY),
+(6, 9, 8, 1, NULL, '收紧巢脾、保持通风并复查储蜜', '陈晨', DATE_SUB(CURDATE(), INTERVAL 8 DAY), '隔板外蜜圈偏薄',
+ '已解除', NOW() - INTERVAL 11 DAY, NOW() - INTERVAL 10 DAY, 0, NOW() - INTERVAL 11 DAY);
+
+INSERT INTO abnormal_recheck (handling_id, inspection_id, hive_id, result, inspector, recheck_date, note, created_at) VALUES
+(4, 6, 6, '不合格', '周敏', DATE_SUB(CURDATE(), INTERVAL 2 DAY), '新王未开产，子脾仍异常，原异常保留并顺延处置期限', NOW() - INTERVAL 2 DAY),
+(6, 9, 8, '合格',   '陈晨', DATE_SUB(CURDATE(), INTERVAL 9 DAY), '蜂群恢复正常，风险解除', NOW() - INTERVAL 9 DAY);
 
 INSERT INTO honey_batch (hive_id, batch_no, weight_kg, status, quality_status, created_at) VALUES
 (1, 'B-2026-001', 12.50, '已入库',       '已入库',       NOW()),
