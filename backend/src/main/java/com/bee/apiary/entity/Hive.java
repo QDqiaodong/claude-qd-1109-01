@@ -26,6 +26,10 @@ public class Hive {
     @Column(name = "status", length = 16)
     public String status;
 
+    /** 软删除：保留巡检、异常处置与复检链路 */
+    @Column(name = "deleted", nullable = false)
+    public Boolean deleted = false;
+
     @Column(name = "created_at")
     public LocalDateTime createdAt = LocalDateTime.now();
 }

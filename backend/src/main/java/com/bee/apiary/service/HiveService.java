@@ -21,9 +21,9 @@ public class HiveService {
             if (!Dict.isValidHiveStatus(status)) {
                 throw new BizException("蜂箱状态非法：" + status);
             }
-            return repo.findByStatus(status);
+            return repo.findByStatusAndDeletedFalse(status);
         }
-        return repo.findAll();
+        return repo.findByDeletedFalse();
     }
 
     public Hive get(Long id) {
@@ -44,6 +44,7 @@ public class HiveService {
         saved.code = input.code;
         saved.location = input.location;
         saved.status = (input.status == null) ? "待检" : input.status;
+        saved.deleted = false;
         return repo.save(saved);
     }
 
@@ -71,10 +72,13 @@ public class HiveService {
         return repo.save(existing);
     }
 
+    /** 删除仅作归档标记；巡检、处置和复检历史仍通过 hive_id 保留。 */
     public void delete(Long id) {
-        if (!repo.existsById(id)) {
-            throw new BizException("蜂箱不存在：" + id);
+        Hive existing = get(id);
+        if (Boolean.TRUE.equals(existing.deleted)) {
+            throw new BizException("蜂箱已删除归档：" + id);
         }
-        repo.deleteById(id);
+        existing.deleted = true;
+        repo.save(existing);
     }
 }

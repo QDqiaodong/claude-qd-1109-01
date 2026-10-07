@@ -11,5 +11,7 @@ public interface HiveRepository extends JpaRepository<Hive, Long> {
 
     Optional<Hive> findByCode(String code);
 
-    List<Hive> findByStatus(String status);
+    List<Hive> findByDeletedFalse();
+
+    List<Hive> findByStatusAndDeletedFalse(String status);
 }

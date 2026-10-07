@@ -22,10 +22,27 @@ public final class Dict {
     public static final List<String> BEE_HEALTH = List.of("健康", "一般", "病态");
 
     // ---------------- 巡检 ----------------
-    /** 已记录 → 已复检，逐级推进 */
-    public static final List<String> INSPECTION_FLOW = List.of("已记录", "已复检");
+    /** 病态异常先进入待处置，复检解除后进入已解除 */
+    public static final List<String> INSPECTION_STATUS = List.of(
+            "已记录", "待处置", "待复检", "风险关联", "已解除");
 
-    public static final List<String> INSPECTION_STATUS = List.of("已记录", "已复检");
+    /** 处置流转：待处置 → 待复检 → 复检合格/复检不合格(终态) */
+    public static final List<String> HANDLING_STATUS = List.of(
+            "待处置", "待复检", "已解除", "复检不合格");
+
+    /** 列表筛选中的业务状态 */
+    public static final List<String> HANDLING_VIEW_STATUS = List.of(
+            "待处置", "待复检", "已解除", "复检不合格", "逾期");
+
+    /** 异常处置措施 */
+    public static final List<String> INSPECTION_ACTION_TYPES = List.of(
+            "隔离治疗", "换脾消毒", "补饲强群", "更换蜂王", "转场观察", "其他");
+
+    /** 默认处置期限：发现异常后 7 天 */
+    public static final java.time.Period DEFAULT_HANDLING_DEADLINE = java.time.Period.ofDays(7);
+
+    /** 复检不合格后风险期限顺延天数 */
+    public static final java.time.Period RECHECK_EXTEND_PERIOD = java.time.Period.ofDays(7);
 
     // ---------------- 采蜜批次 ----------------
     /** 待质检 → 质检放行/复检合格 → 已入库；不合格进入隔离，已作废为终态 */
@@ -61,14 +78,20 @@ public final class Dict {
         return health != null && BEE_HEALTH.contains(health);
     }
 
-    /** 巡检状态只能逐级推进：已记录 → 已复检 */
-    public static boolean canTransferInspection(String from, String to) {
-        int i = INSPECTION_FLOW.indexOf(from);
-        return i >= 0 && i + 1 < INSPECTION_FLOW.size() && INSPECTION_FLOW.get(i + 1).equals(to);
-    }
-
     public static boolean isValidInspectionStatus(String status) {
         return status != null && INSPECTION_STATUS.contains(status);
+    }
+
+    public static boolean isValidHandlingStatus(String status) {
+        return status != null && HANDLING_STATUS.contains(status);
+    }
+
+    public static boolean isValidHandlingViewStatus(String status) {
+        return status != null && HANDLING_VIEW_STATUS.contains(status);
+    }
+
+    public static boolean isValidInspectionActionType(String type) {
+        return type != null && INSPECTION_ACTION_TYPES.contains(type);
     }
 
     public static boolean isValidHoneyBatchStatus(String status) {

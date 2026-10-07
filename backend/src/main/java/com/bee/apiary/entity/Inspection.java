@@ -34,8 +34,17 @@ public class Inspection {
     @Column(name = "note", length = 255)
     public String note;
 
+    /** 已记录 / 待处置 / 待复检 / 风险关联 / 已解除 */
     @Column(name = "status", length = 16)
     public String status;
+
+    /** 异常链路的首条巡检；无处置链路时与 id 相同 */
+    @Column(name = "root_inspection_id")
+    public Long rootInspectionId;
+
+    /** 当前生效处置项，复检合格后清空 */
+    @Column(name = "active_handling_id")
+    public Long activeHandlingId;
 
     @Column(name = "created_at")
     public LocalDateTime createdAt = LocalDateTime.now();

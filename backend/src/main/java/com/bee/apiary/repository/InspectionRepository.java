@@ -17,4 +17,8 @@ public interface InspectionRepository extends JpaRepository<Inspection, Long> {
     List<Inspection> findByStatus(String status);
 
     List<Inspection> findByInspectDateBetween(LocalDate start, LocalDate end);
+
+    List<Inspection> findByRootInspectionId(Long rootInspectionId);
+
+    List<Inspection> findByHiveIdOrderByInspectDateAscIdAsc(Long hiveId);
 }
