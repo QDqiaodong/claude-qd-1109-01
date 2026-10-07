@@ -1,0 +1,29 @@
+:root {
+  /* 蜜黄主色 —— 养蜂场主题，区别于 1010 赭石色系 */
+  --primary: #F4B400;
+  --primary-deep: #C99700;
+  --primary-soft: #F9D671;
+  --primary-wash: #FEF4D2;
+  --ink: #4a4334;
+  --muted: #9a8f74;
+  --line: #ece3cf;
+  --bg: #fbf8ec;
+
+  --el-color-primary: #F4B400;
+  --el-color-primary-light-3: #F7C84D;
+  --el-color-primary-light-5: #F9D671;
+  --el-color-primary-light-7: #FBE495;
+  --el-color-primary-light-8: #FCE0A8;
+  --el-color-primary-light-9: #FEF4D2;
+  --el-color-primary-dark-2: #C99700;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+}
